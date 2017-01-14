@@ -1,0 +1,9 @@
+"annotations" folder for keypoints (COCO) and "images" folder for images (COCO).
+
+put jsons in "annotations" folder:
+	- person_keypoints_train2014.json
+	- person_keypoints_val2014.json
+
+put images in "images" folder:
+	- train2014 directory with training images
+	- val2014 directory with validation images

@@ -2,6 +2,8 @@ dataset/FLIC
 dataset/LEEDS
 dataset/MPI/images
 dataset/MPI/mpii_human_pose_v1_u12_1
+dataset/COCO/annotations/*
+dataset/COCO/images/*
 training/lmdb/*
 training/json/*
 training/prototxt/*
