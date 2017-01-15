@@ -36,18 +36,20 @@ joint_y_other(n,1) joint_y_other(n,2) ... joint_y_other(n,17) |-> all floats
 joint_visible_other(n,1) joint_visible_other(n,2) ... joint_visible_other(n,17) |-> all floats
 '''
 class MetaData:
-    dataset = 'NameOfTheDataset'
-    height = 1080
-    width = 1920
-    isValidation = False
-    peopleIndex = 1
-    numOtherPeople = 1
-    annolistIndex = 1   # image_id -> to get the corresponding image or annotations from COCO
-    writeNumber = 1     # seq. number of the processed image with actual annotations
-    bbox = []
-    joints = []
-    bboxOther = [[]]
-    jointsOther = [[]]
+
+    def __init__(self):
+        self.dataset = 'NameOfTheDataset'
+        self.height = 1080
+        self.width = 1920
+        self.isValidation = False
+        self.peopleIndex = 1
+        self.numOtherPeople = 1
+        self.annolistIndex = 1  # image_id -> to get the corresponding image or annotations from COCO
+        self.writeNumber = 1  # seq. number of the processed image with actual annotations
+        self.bbox = []
+        self.joints = []
+        self.bboxOther = []
+        self.jointsOther = []
 
     def saveMetaData(self):
         metaData = np.zeros(shape=(self.height, self.width, 1), dtype=np.uint8)
@@ -93,7 +95,7 @@ class MetaData:
             # every third (coco 51d vector) - separate x,y,visibility
             lineBinary = self.float2bytes(self.joints[i::3])
             for j in range(len(lineBinary)):
-                metaData[clidx] = ord(lineBinary[j])
+                metaData[clidx][j] = ord(lineBinary[j])
             clidx += 1
 
         # process other people
@@ -109,7 +111,7 @@ class MetaData:
                 # every third (coco 51d vector) - separate x,y,visibility
                 lineBinary = self.float2bytes(self.jointsOther[p_other][i::3])
                 for j in range(len(lineBinary)):
-                    metaData[clidx] = ord(lineBinary[j])
+                    metaData[clidx][j] = ord(lineBinary[j])
                 clidx += 1
 
         return metaData
@@ -155,7 +157,6 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
 
     # process each image
     n_processed = 1
-    n_people = 0
     for img_ann in imgs_merged:
         isVal = False
         if dataTypeTrain in img_ann['file_name']:
@@ -170,23 +171,14 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
 
         height = img.shape[0]
         width = img.shape[1]
-        if width < 64:
-            img = cv2.copyMakeBorder(img, 0, 0, 0, 64 - width, cv2.BORDER_CONSTANT, value=(128, 128, 128))
-            print('[WARNING] Image was padded! Width < 64!')
-            width = 64
+        if width < 68:
+            img = cv2.copyMakeBorder(img, 0, 0, 0, 68 - width, cv2.BORDER_CONSTANT, value=(128, 128, 128))
+            print('[WARNING] Image was padded! Width < 68!')
+            width = 68
 
         # get annotations for keypoints
         annIds = coco.getAnnIds(imgIds=img_ann['id'], catIds=personId)
         ann_persons = coco.loadAnns(annIds)
-
-        # Metadata object - ugly hack used to get data into Caffe Data layer as image 4-th channel
-        metaData = MetaData()
-        metaData.dataset = 'COCO'
-        metaData.height = height
-        metaData.width = width
-        metaData.isValidation = isVal
-        metaData.annolistIndex = img_ann['id']
-        metaData.writeNumber = n_processed
 
         person_id = 0
         for person in ann_persons:
@@ -196,30 +188,39 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
             else:
                 continue
 
-            if person_id == 1:
-                metaData.peopleIndex = person_id
-                metaData.bbox = person['bbox']
-                metaData.joints = person['keypoints']
-            else:
-                metaData.bboxOther.append(person['bbox'])
-                metaData.jointsOther.append(person['keypoints'])
+            # Metadata object - ugly hack used to get data into Caffe Data layer as image 4-th channel
+            metaData = MetaData()
+            metaData.dataset = 'COCO'
+            metaData.height = height
+            metaData.width = width
+            metaData.isValidation = isVal
+            metaData.annolistIndex = img_ann['id']
+            metaData.writeNumber = n_processed
+            metaData.peopleIndex = person_id
+            metaData.bbox = person['bbox']
+            metaData.joints = person['keypoints']
 
-        # check if any annotated persons at all
-        if person_id > 0:
-            metaData.numOtherPeople = person_id - 1
+            # go through other annotated persons in this image
+            for person_other in ann_persons:
+                if person_other == person or person_other['num_keypoints'] == 0:
+                    continue
+
+                metaData.bboxOther.append(person_other['bbox'])
+                metaData.jointsOther.append(person_other['keypoints'])
+
+            metaData.numOtherPeople = len(metaData.bboxOther)
             metaDataChannel = metaData.saveMetaData()
             img4ch = np.concatenate((img, metaDataChannel), axis=2)
             img4ch = np.transpose(img4ch, (2, 0, 1))
             datum = caffe.io.array_to_datum(img4ch, label=0)
-            txn.put(str(metaData.annolistIndex), datum.SerializeToString())
-
-            n_processed += 1
-            n_people += person_id
+            txn.put('%09d' % n_processed, datum.SerializeToString())
 
             if n_processed % 1000 == 0:
                 txn.commit()
                 txn = env.begin(write=True)
-                print('Saved next batch of 1000 images!')
+                print('Saved next batch of 1000 persons! Total: %d' % n_processed)
+
+            n_processed += 1
 
         if DEBUG:
             plt.figure()
@@ -232,7 +233,7 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
     txn.commit()
     env.close()
 
-    print('Found total of: %d persons' % n_people)
+    print('Found total of: %d persons' % n_processed)
 
 if __name__ == "__main__":
     cocoDir = '../dataset/COCO/'
