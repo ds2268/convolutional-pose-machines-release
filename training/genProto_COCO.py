@@ -19,7 +19,7 @@ def setLayers(data_source, batch_size, layername, kernel, stride, outCH, label_n
     if deploy == False:
         n.data, n.tops['label'] = L.CPMData(cpmdata_param=dict(backend=1, source=data_source, batch_size=batch_size), 
                                                     transform_param=transform_param_in, ntop=2)
-        n.tops[label_name[1]], n.tops[label_name[0]] = L.Slice(n.label, slice_param=dict(axis=1, slice_point=15), ntop=2)
+        n.tops[label_name[1]], n.tops[label_name[0]] = L.Slice(n.label, slice_param=dict(axis=1, slice_point=18), ntop=2)
     else:
         input = "data"
         dim1 = 1
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     d_caffemodel = '%s/caffemodel' % directory # the place you want to store your caffemodel
     base_lr = 8e-5
     transform_param = dict(stride=8, crop_size_x=368, crop_size_y=368, 
-                             target_dist=1.171, scale_prob=1, scale_min=0.7, scale_max=1.3,
+                             target_dist=0.8, scale_prob=1, scale_min=0.7, scale_max=1.3,
                              max_rotate_degree=40, center_perterb_max=0, do_clahe=False)
     nCP = 3
     CH = 128
@@ -183,18 +183,18 @@ if __name__ == "__main__":
     
     layername = ['C', 'P'] * nCP + ['C','C','D','C','D','C'] + ['L'] # first-stage
     kernel =    [ 9,  3 ] * nCP + [ 5 , 9 , 0 , 1 , 0 , 1 ] + [0] # first-stage
-    outCH =     [128, 128] * nCP + [ 32,512, 0 ,512, 0 ,15 ] + [0] # first-stage
+    outCH =     [128, 128] * nCP + [ 32,512, 0 ,512, 0 ,18 ] + [0] # first-stage
     stride =    [ 1 ,  2 ] * nCP + [ 1 , 1 , 0 , 1 , 0 , 1 ] + [0] # first-stage
 
     if stage >= 2:
         layername += ['C', 'P'] * nCP + ['$'] + ['C'] + ['@'] + ['C'] * 5            + ['L']
-        outCH +=     [128, 128] * nCP + [ 0 ] + [32 ] + [ 0 ] + [128,128,128,128,15] + [ 0 ]
+        outCH +=     [128, 128] * nCP + [ 0 ] + [32 ] + [ 0 ] + [128,128,128,128,18] + [ 0 ]
         kernel +=    [ 9,   3 ] * nCP + [ 0 ] + [ 5 ] + [ 0 ] + [11, 11, 11, 1,   1] + [ 0 ]
         stride +=    [ 1 ,  2 ] * nCP + [ 0 ] + [ 1 ] + [ 0 ] + [ 1 ] * 5            + [ 0 ]
 
         for s in range(3, stage+1):
             layername += ['$'] + ['C'] + ['@'] + ['C'] * 5            + ['L']
-            outCH +=     [ 0 ] + [32 ] + [ 0 ] + [128,128,128,128,15] + [ 0 ]
+            outCH +=     [ 0 ] + [32 ] + [ 0 ] + [128,128,128,128,18] + [ 0 ]
             kernel +=    [ 0 ] + [ 5 ] + [ 0 ] + [11, 11, 11,  1, 1 ] + [ 0 ]
             stride +=    [ 0 ] + [ 1 ] + [ 0 ] + [ 1 ] * 5            + [ 0 ]
 
