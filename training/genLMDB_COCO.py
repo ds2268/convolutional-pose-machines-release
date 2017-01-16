@@ -6,9 +6,11 @@ import cv2
 import lmdb
 import caffe
 import os.path
+import sys
 import struct
 import random
 from pycocotools.coco import COCO
+from optparse import OptionParser
 
 # if True you can inspect each individual image and it's keypoint annotations (COCO)
 DEBUG = False
@@ -160,10 +162,10 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
     for img_ann in imgs_merged:
         isVal = False
         if dataTypeTrain in img_ann['file_name']:
-            img = cv2.imread('%s/images/%s/%s' % (data_dir, dataTypeTrain, img_ann['file_name']))
+            img = cv2.imread('%s/%s/%s' % (data_dir, dataTypeTrain, img_ann['file_name']))
             coco = cocoTrain
         elif dataTypeVal in img_ann['file_name']:
-            img = cv2.imread('%s/images/%s/%s' % (data_dir, dataTypeVal, img_ann['file_name']))
+            img = cv2.imread('%s/%s/%s' % (data_dir, dataTypeVal, img_ann['file_name']))
             isVal = True
             coco = cocoVal
         else:
@@ -213,7 +215,7 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
             img4ch = np.concatenate((img, metaDataChannel), axis=2)
             img4ch = np.transpose(img4ch, (2, 0, 1))
             datum = caffe.io.array_to_datum(img4ch, label=0)
-            txn.put('%09d' % n_processed, datum.SerializeToString())
+            txn.put('%012d' % n_processed, datum.SerializeToString())
 
             if n_processed % 1000 == 0:
                 txn.commit()
@@ -236,8 +238,12 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
     print('Found total of: %d persons' % n_processed)
 
 if __name__ == "__main__":
+    parser = OptionParser(usage="usage: python genLMDB_COCO.py --lmdb lmdbPath")
+    parser.add_option("-l", "--lmdb", dest="lmdb", help="Path to store lmdb dataset", default="LMDB_COCO/")
+    (options, args) = parser.parse_args(sys.argv)
+
     cocoDir = '../dataset/COCO/'
-    lmdbDir = '/media/ssd250/COCO_LMDB'
+    lmdbDir = options.lmdb
 
     if not os.path.exists(lmdbDir):
         os.makedirs(lmdbDir)

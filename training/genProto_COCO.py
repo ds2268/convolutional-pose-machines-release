@@ -3,6 +3,7 @@ import os
 import math
 import argparse
 import json
+from optparse import OptionParser
 import caffe
 from caffe import layers as L  # pseudo module using __getattr__ magic to generate protobuf messages
 from caffe import params as P  # pseudo module using __getattr__ magic to generate protobuf messages
@@ -160,10 +161,13 @@ solver_mode: GPU\n' % (os.path.dirname(folder_name), base_lr, stepsize, folder_n
 
 
 if __name__ == "__main__":
+    parser = OptionParser(usage="usage: python genProto_COCO.py --lmdb lmdbPath")
+    parser.add_option("-l", "--lmdb", dest="lmdb", help="Path to store lmdb dataset", default="LMDB_COCO/")
+    (options, args) = parser.parse_args(sys.argv)
 
     ### Change here for different dataset
     directory = 'prototxt/COCO'
-    dataFolder = '/media/ssd250/COCO_LMDB/'
+    dataFolder = options.lmdb
     stepsize = 136106 # stepsize to decrease learning rate. This should depend on your dataset size
     ###
 
