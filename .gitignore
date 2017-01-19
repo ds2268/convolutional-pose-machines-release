@@ -11,6 +11,7 @@ training/prototxt/*
 *.caffemodel
 testing/results/
 *.m~
+*.py~
 caffePath.cfg
 models/
 testing/python/.*

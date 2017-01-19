@@ -1,7 +1,5 @@
 import matplotlib.pyplot as plt
-import scipy.io as sio
 import numpy as np
-import json
 import cv2
 import lmdb
 import caffe
@@ -248,4 +246,4 @@ if __name__ == "__main__":
     if not os.path.exists(lmdbDir):
         os.makedirs(lmdbDir)
 
-    writeLMDB_COCO(cocoDir, lmdbDir, True)
+    writeLMDB_COCO(cocoDir, lmdbDir, False)
