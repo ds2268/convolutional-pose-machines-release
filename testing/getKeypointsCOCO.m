@@ -1,4 +1,7 @@
-function predictions = getKeypointsCOCO(I, rect_roi, param)
+function predictions = getKeypointsCOCO(I, rect_roi, net, param)
+% Given image, bbox, network and parameters, this method finds
+% keypoint location and returns it as [x1, y1, v1,...].
+% It can search through mutiple scales as defined in params (look at demo).
 
     % COCO limb names
     % 0) nose
@@ -12,106 +15,98 @@ function predictions = getKeypointsCOCO(I, rect_roi, param)
     % set proper scale
     self_scale = rect_roi(4) / param.boxSize;
     scale_abs = param.target_scale / self_scale;
-    I_s = imresize(I, scale_abs);
-    center_person_s = center_person * scale_abs;
-    rect_roi_s = rect_roi * scale_abs;
-    %I_cpm = I_s(center_person_s(2)-param.boxSize/2+1:center_person_s(2)+param.boxSize/2, center_person_s(1)-param.boxSize/2:center_person_s(1)+param.boxSize/2-1, :);
-    [I_cpm, pad] = padAround(I_s, param.boxSize, center_person_s, param.padValue);
+    
+    % go through multiple scales
+    results = cell(1, numel(param.scaleSearch));
+    pad = cell(1, numel(param.scaleSearch));
+    for i = 1:numel(param.scaleSearch)
+        if param.DEBUG
+            disp(strcat('Going through scale: ', num2str(param.scaleSearch(i))));
+        end
+        scale = scale_abs * param.scaleSearch(i);
+        I_s = imresize(I, scale);
+        center_person_s = center_person * scale;
+        rect_roi_s = rect_roi * scale;
+        [I_cpm, pad{i}] = padAround(I_s, param.boxSize, center_person_s, param.padValue);
+        
+        % prepare input for CPM
+        I_cpm_input = preprocess(I_cpm, 0.5, param);
 
-    % replace original image with scaled one
-    % plot also CPM input (368x368)
-    if param.DEBUG == true
-        figure(1); clf;
-        imshow(I_s)
-        hold on;
-        plot(center_person_s(1), center_person_s(2), 'r*');
-        hold on;
-        rectangle('Position', rect_roi_s, 'EdgeColor', 'green', 'LineWidth', 2);
-
-        figure(2); clf;
-        imshow(I_cpm);
-        size(I_cpm)
+        % get results
+        result = net.forward({single(I_cpm_input)});
+        results{i} = result{1};
+        
+        pool_time = size(I_cpm, 1) / size(results{i}, 1);
+        results{i} = imresize(results{i}, pool_time);
+        results{i} = resizeIntoScaledImg(results{i}, pad{i});
+        results{i} = imresize(results{i}, [size(I, 2) size(I, 1)]);
+        
+        % replace original image with scaled one
+        % plot also CPM input (368x368)
+        if param.DEBUG == true
+            figure(1); clf;
+            imshow(I_s)
+            hold on;
+            plot(center_person_s(1), center_person_s(2), 'r*');
+            hold on;
+            rectangle('Position', rect_roi_s, 'EdgeColor', 'green', 'LineWidth', 2);
+            input('Press key to continue...');
+        end
     end
 
-    % prepare input for CPM
-    I_cpm_input = preprocess(I_cpm, 0.5, param);
-
-    % get results
-    caffe.set_mode_gpu();
-    caffe.set_device(param.gpuId);
-    net = caffe.Net(param.deploy_path, param.model_path, 'test');
-    result = net.forward({single(I_cpm_input)});
-    result = result{1};
-
-    % rescale heatmaps back to input size (368x368) % stride 8
-    result_368 = {};
-    I_plot_cpm = I_cpm;
-    I_plot_org = I;
-    results_org = {};
-    predictions = {};
+    % summing up scores
+    result = zeros(size(results{1}));
+    for i = 1:size(results, 2)
+        result = result + results{i};
+    end
+    %result = result / size(results, 2); ?
+    result = permute(result, [2 1 3]);
+    
+    predictions = [];
     for i = 1:size(result, 3) - 1
-        tmp = permute(result(:,:,i), [2, 1]);
-        result_368{i} = imresize(tmp, 8);
-        [max_X, max_Y] = findMaximum(result_368{i});
-        I_plot_cpm = insertText(I_plot_cpm, [max_Y, max_X], labels(i),...
-                     'FontSize',8,'TextColor','green', 'BoxOpacity', 0);
-        I_plot_cpm = insertMarker(I_plot_cpm, [max_Y, max_X],'x','color', 'red', 'size', 3);
-        results_org{i} = imresize(resizeIntoScaledImg(result_368{i}, pad), [size(I, 1) size(I, 2)]);
-
-        [max_X, max_Y] = findMaximum(results_org{i});
-        I_plot_org = insertText(I_plot_org, [max_Y, max_X], labels(i),...
-                     'FontSize',16,'TextColor','green', 'BoxOpacity', 0);
-        I_plot_org = insertMarker(I_plot_org, [max_Y, max_X],'x','color', 'red', 'size', 10);
-
-        predictions{i} = [max_X, max_Y];
+        [max_X, max_Y, score] = findMaximum(result(:,:,i));
+        predictions = [predictions, max_Y, max_X, 1];
     end
-
-    % plot keypoints on CPM input and on original image
-    if param.DEBUG == true
-        figure(3);clf;
-        imshow(I_plot_cpm);
-        figure(4);clf;
-        imshow(I_plot_org);
-    end
-
-    caffe.reset_all()
 end
 
 
-%% Helper functions
-function [x,y] = findMaximum(map)
-    [~,i] = max(map(:));
+% Helper functions
+function [x,y,score] = findMaximum(map)
+    [score,i] = max(map(:));
     [x,y] = ind2sub(size(map), i);
 end
 
 function score = resizeIntoScaledImg(score, pad)
+    np = size(score,3)-1;
+    score = permute(score, [2 1 3]);
     if(pad(1) < 0)
-        padup = cat(3, zeros(-pad(1), size(score,2)));
+        padup = cat(3, zeros(-pad(1), size(score,2), np), ones(-pad(1), size(score,2), 1));
         score = [padup; score]; % pad up
     else
         score(1:pad(1),:,:) = []; % crop up
     end
     
     if(pad(2) < 0)
-        padleft = cat(3, zeros(size(score,1), -pad(2)));
+        padleft = cat(3, zeros(size(score,1), -pad(2), np), ones(size(score,1), -pad(2), 1));
         score = [padleft score]; % pad left
     else
         score(:,1:pad(2),:) = []; % crop left
     end
     
     if(pad(3) < 0)
-        paddown = cat(3, zeros(-pad(3), size(score,2)));
+        paddown = cat(3, zeros(-pad(3), size(score,2), np), ones(-pad(3), size(score,2), 1));
         score = [score; paddown]; % pad down
     else
         score(end-pad(3)+1:end, :, :) = []; % crop down
     end
     
     if(pad(4) < 0)
-        padright = cat(3, zeros(size(score,1), -pad(4)));
+        padright = cat(3, zeros(size(score,1), -pad(4), np), ones(size(score,1), -pad(4), 1));
         score = [score padright]; % pad right
     else
         score(:,end-pad(4)+1:end, :) = []; % crop right
     end
+    score = permute(score, [2 1 3]);
 end
 
 function [img_padded, pad] = padAround(img, boxsize, center, padValue)

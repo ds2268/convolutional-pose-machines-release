@@ -2,6 +2,7 @@ clear all;
 close all;
 
 % This is basic code to test learned model(COCO) on example image
+% using getKeypointsCOCO method, it also displays found keypoints.
 
 % COCO limb names
 % 0) nose
@@ -11,15 +12,21 @@ labels = {'nose', 'leftEye', 'rightEye', 'leftEar', 'rightEar', 'leftShoulder', 
           'leftWrist', 'rightWrist', 'leftHip', 'rightHip', 'leftKnee', 'rightKnee', 'leftAnkle', 'rightAnkle'};
 
 % settings
-param.img_path = 'sample_image/roger.png';
+param.img_path = 'sample_image/nadal.png';
 param.deploy_path = '../training/prototxt/COCO/pose_deploy.prototxt';
-param.model_path = '../training/prototxt/COCO/caffemodel_trained_100k_00008/pose_iter_100000.caffemodel';
+param.model_path = '../training/prototxt/COCO/caffemodel/pose_train_iter_100000.caffemodel';
 param.target_scale = 0.8;
 param.sigma_center = 21;
 param.boxSize = 368;
 param.gpuId = 0;
 param.padValue = 128;
+param.scaleSearch = 0.7:0.1:1.3; % fit training
 param.DEBUG = false;
+
+% setup Caffe network
+caffe.set_mode_gpu();
+caffe.set_device(param.gpuId);
+net = caffe.Net(param.deploy_path, param.model_path, 'test');
 
 I = imread(param.img_path);
 
@@ -31,10 +38,11 @@ hold on;
 rect_roi = getrect(1);
 
 % get keypoints
-keypoints = getKeypointsCOCO(I, rect_roi, param);
+% same format as COCO 1x51 [x1, y1, v1,...]
+% visibility always 1
+keypoints = getKeypointsCOCO(I, rect_roi, net, param);
+caffe.reset_all()
 
-% plot keypoints
-for i=1:numel(keypoints)
-    plot(keypoints{i}(2), keypoints{i}(1), 'g*')
-    hold on;
-end
+x_all = keypoints(1:3:end);
+y_all = keypoints(2:3:end);
+plot(x_all, y_all, 'g*');
