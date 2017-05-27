@@ -180,13 +180,37 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
         annIds = coco.getAnnIds(imgIds=img_ann['id'], catIds=personId)
         ann_persons = coco.loadAnns(annIds)
 
+        p_centers = np.array([[]])
         person_id = 0
         for person in ann_persons:
-            # check if any keypoints at all
-            if person['num_keypoints'] > 0:
-                person_id += 1
+            # skip this person if parts number is to low or if
+            # segmentation area is to small
+            if person['num_keypoints'] >= 5 and person['area'] >= 32*32:
+                bbox = person['bbox']
+                # skip this person also if the distance to existing person is to small
+                p_center = np.array([[bbox[0] + bbox[2]/2,
+                                      bbox[1] + bbox[3]/2,
+                                      max(bbox[2], bbox[3])]])
+
+                flag = False
+                if p_centers.size == 0:
+                    p_centers = p_center
+                else:
+                    for center in p_centers:
+                        dist = center[0:2] - p_center[0,0:2]
+                        if np.linalg.norm(dist) < center[2]*0.3:
+                            flag = True
+                            break
+
+                    if flag:
+                        continue
+                    else:
+                        np.append(p_centers, p_center, axis=0)
             else:
                 continue
+
+            person_id += 1
+
 
             # Metadata object - ugly hack used to get data into Caffe Data layer as image 4-th channel
             metaData = MetaData()
@@ -202,7 +226,7 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
 
             # go through other annotated persons in this image
             for person_other in ann_persons:
-                if person_other == person or person_other['num_keypoints'] == 0:
+                if person_other == person or person['num_keypoints'] == 0:
                     continue
 
                 metaData.bboxOther.append(person_other['bbox'])
