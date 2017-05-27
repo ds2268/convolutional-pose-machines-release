@@ -10,7 +10,7 @@ function predictions = getKeypointsJUMP(I, rect_roi, center_person, net, param)
     labels = {'nose', 'leftEye', 'rightEye', 'leftEar', 'rightEar', 'leftShoulder', 'rightShoulder', 'leftElbow', 'rightElbow',...
               'leftWrist', 'rightWrist', 'leftHip', 'rightHip', 'leftKnee', 'rightKnee', 'leftAnkle', 'rightAnkle'};
 
-    center_person = [(rect_roi(1) + rect_roi(1) + rect_roi(3))/2, (rect_roi(2) + rect_roi(2) + rect_roi(4))/2];
+    %center_person = [(rect_roi(1) + rect_roi(1) + rect_roi(3))/2, (rect_roi(2) + rect_roi(2) + rect_roi(4))/2];
 
     % set proper scale
     self_scale = rect_roi(4) / param.boxSize;

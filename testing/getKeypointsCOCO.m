@@ -3,12 +3,12 @@ function predictions = getKeypointsCOCO(I, rect_roi, net, param)
 % keypoint location and returns it as [x1, y1, v1,...].
 % It can search through mutiple scales as defined in params (look at demo).
 
-    % COCO limb names
+% COCO limb names
     % 0) nose
     % 1) left_eye 3) left_ear  5) left_shoulder 7) left_elbow 9) left_wrist 11) left_hip 13) left_knee 15) left_ankle
     % 2) right_eye 4) right_ear 6) right_shoulder 8) right_elbow 10) right_wrist 12) right_hip 14) right_knee 16) right_ankle
     labels = {'nose', 'leftEye', 'rightEye', 'leftEar', 'rightEar', 'leftShoulder', 'rightShoulder', 'leftElbow', 'rightElbow',...
-          'leftWrist', 'rightWrist', 'leftHip', 'rightHip', 'leftKnee', 'rightKnee', 'leftAnkle', 'rightAnkle'};
+              'leftWrist', 'rightWrist', 'leftHip', 'rightHip', 'leftKnee', 'rightKnee', 'leftAnkle', 'rightAnkle'};
 
     center_person = [(rect_roi(1) + rect_roi(1) + rect_roi(3))/2, (rect_roi(2) + rect_roi(2) + rect_roi(4))/2];
 
@@ -18,6 +18,8 @@ function predictions = getKeypointsCOCO(I, rect_roi, net, param)
     
     % go through multiple scales
     results = cell(1, numel(param.scaleSearch));
+    global results_mat;
+    results_mat = zeros(size(I,2), size(I,1), param.numParts + 1, numel(param.scaleSearch));
     pad = cell(1, numel(param.scaleSearch));
     for i = 1:numel(param.scaleSearch)
         if param.DEBUG
@@ -40,12 +42,13 @@ function predictions = getKeypointsCOCO(I, rect_roi, net, param)
         results{i} = imresize(results{i}, pool_time);
         results{i} = resizeIntoScaledImg(results{i}, pad{i});
         results{i} = imresize(results{i}, [size(I, 2) size(I, 1)]);
+        results_mat(:,:,:,i) = results{i};
         
         % replace original image with scaled one
         % plot also CPM input (368x368)
         if param.DEBUG == true
             figure(1); clf;
-            imshow(I_s)
+            imshow(I_cpm)
             hold on;
             plot(center_person_s(1), center_person_s(2), 'r*');
             hold on;
@@ -55,17 +58,21 @@ function predictions = getKeypointsCOCO(I, rect_roi, net, param)
     end
 
     % summing up scores
-    result = zeros(size(results{1}));
-    for i = 1:size(results, 2)
-        result = result + results{i};
+    result = zeros(size(I,2), size(I,1), param.numParts);
+    for i = 1:param.numParts
+        result(:,:,i) = max(results_mat(:,:,i,:), [], 4);
     end
-    %result = result / size(results, 2); ?
     result = permute(result, [2 1 3]);
     
     predictions = [];
-    for i = 1:size(result, 3) - 1
+    for i = 1:size(result, 3)
         [max_X, max_Y, score] = findMaximum(result(:,:,i));
-        predictions = [predictions, max_Y, max_X, 1];
+        if score >= param.threshVisible
+            visible = 1;
+        else
+            visible = 0;
+        end
+        predictions = [predictions, max_Y, max_X, visible, score];
     end
 end
 
