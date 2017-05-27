@@ -226,7 +226,7 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
 
             # go through other annotated persons in this image
             for person_other in ann_persons:
-                if person_other == person or person['num_keypoints'] == 0:
+                if person_other == person or person_other['num_keypoints'] == 0:
                     continue
 
                 metaData.bboxOther.append(person_other['bbox'])
