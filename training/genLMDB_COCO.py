@@ -185,7 +185,7 @@ def writeLMDB_COCO(data_dir, lmdb_path, validation):
         for person in ann_persons:
             # skip this person if parts number is to low or if
             # segmentation area is to small
-            if person['num_keypoints'] >= 5 and person['area'] >= 32*32:
+            if person['num_keypoints'] >= 9 and person['area'] >= 32*32:
                 bbox = person['bbox']
                 # skip this person also if the distance to existing person is to small
                 p_center = np.array([[bbox[0] + bbox[2]/2,
